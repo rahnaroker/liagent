@@ -2,6 +2,7 @@ package epub
 
 import (
 	"crypto/rand"
+	"crypto/sha1"
 	"fmt"
 	"strconv"
 	"strings"
@@ -49,12 +50,42 @@ func (b *builder) lang() string {
 	return "ru"
 }
 
-// bookID returns a stable unique identifier for dc:identifier.
+// bookID returns a stable unique identifier for dc:identifier. The FB2 document
+// id is preferred; otherwise a deterministic UUID is derived from the metadata so
+// re-exporting the same book yields the same id (Send to Kindle then dedupes it
+// instead of creating a duplicate). Only a book with no title and no authors
+// falls back to a random UUID.
 func (b *builder) bookID() string {
 	if id := strings.TrimSpace(b.book.Meta.DocID); id != "" {
 		return "urn:uuid:" + id
 	}
+	if u := stableUUID(b.book.Meta); u != "" {
+		return "urn:uuid:" + u
+	}
 	return "urn:uuid:" + pseudoUUID()
+}
+
+// stableUUID derives a deterministic (name-based, v5-style) UUID from the book's
+// title, authors and series. Returns "" when there is nothing to hash.
+func stableUUID(m model.Metadata) string {
+	title := strings.TrimSpace(m.Title)
+	if title == "" && len(m.Authors) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString(title + "\x00")
+	for _, a := range m.Authors {
+		sb.WriteString(personFileAs(a) + "\x00")
+	}
+	if m.Sequence != nil {
+		sb.WriteString(m.Sequence.Name + "\x00" + m.Sequence.Number)
+	}
+	sum := sha1.Sum([]byte(sb.String()))
+	var u [16]byte
+	copy(u[:], sum[:16])
+	u[6] = (u[6] & 0x0f) | 0x50 // version 5 (name-based)
+	u[8] = (u[8] & 0x3f) | 0x80 // RFC 4122 variant
+	return fmt.Sprintf("%x-%x-%x-%x-%x", u[0:4], u[4:6], u[6:8], u[8:10], u[10:16])
 }
 
 func (b *builder) renderOPF(pl *plan) string {

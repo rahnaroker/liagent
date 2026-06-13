@@ -57,6 +57,26 @@ type plan struct {
 	depthOf  map[*model.Section]int       // section -> tree depth (heading level)
 	fragOf   map[*model.Section]string    // section -> stable anchor id
 	paraFrag map[*model.Paragraph]string  // heading/id paragraph -> anchor id
+	usedFrag map[string]bool              // anchor ids already handed out (uniqueness)
+}
+
+// uniqueFrag returns base if unused, otherwise base-2, base-3, … so every anchor
+// id is unique across the book (two FB2 ids can sanitise to the same NCName).
+func (pl *plan) uniqueFrag(base string) string {
+	if base == "" {
+		return ""
+	}
+	if !pl.usedFrag[base] {
+		pl.usedFrag[base] = true
+		return base
+	}
+	for i := 2; ; i++ {
+		c := fmt.Sprintf("%s-%d", base, i)
+		if !pl.usedFrag[c] {
+			pl.usedFrag[c] = true
+			return c
+		}
+	}
 }
 
 // buildPlan walks the book, assigns sections to files (splitting oversized
@@ -70,6 +90,7 @@ func (b *builder) buildPlan() *plan {
 		depthOf:  map[*model.Section]int{},
 		fragOf:   map[*model.Section]string{},
 		paraFrag: map[*model.Paragraph]string{},
+		usedFrag: map[string]bool{},
 	}
 
 	// Images first: render passes need the binary id -> path mapping.
@@ -120,9 +141,15 @@ func (b *builder) buildPlan() *plan {
 	if b.book.Notes != nil && len(b.book.Notes.Sections) > 0 {
 		f := "text/notes.xhtml"
 		pl.docs = append(pl.docs, &doc{file: f, id: "notes", title: "Примечания", kind: kindNotes, secs: b.book.Notes.Sections})
-		for _, n := range b.book.Notes.Sections {
+		for i, n := range b.book.Notes.Sections {
+			frag := safeID(n.ID)
+			if frag == "" {
+				frag = fmt.Sprintf("note_%d", i+1)
+			}
+			frag = pl.uniqueFrag(frag)
+			pl.fragOf[n] = frag
 			if n.ID != "" {
-				pl.idMap[n.ID] = ref{file: f, frag: safeID(n.ID)}
+				pl.idMap[n.ID] = ref{file: f, frag: frag}
 			}
 		}
 	}
@@ -228,6 +255,7 @@ func (s *splitter) record(sec *model.Section, file string, depth int) {
 		s.auto++
 		frag = fmt.Sprintf("sec_%d", s.auto)
 	}
+	frag = s.pl.uniqueFrag(frag)
 	s.pl.fragOf[sec] = frag
 	if sec.ID != "" {
 		s.pl.idMap[sec.ID] = ref{file: file, frag: frag}
@@ -245,6 +273,7 @@ func (s *splitter) record(sec *model.Section, file string, depth int) {
 			s.auto++
 			frag = fmt.Sprintf("h_%d", s.auto)
 		}
+		frag = s.pl.uniqueFrag(frag)
 		s.pl.paraFrag[p] = frag
 		if p.ID != "" {
 			s.pl.idMap[p.ID] = ref{file: file, frag: frag}

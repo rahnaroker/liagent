@@ -48,7 +48,11 @@ func (r *renderer) renderCover() {
 
 func (r *renderer) renderNotes(secs []*model.Section) {
 	for _, n := range secs {
-		r.w.WriteString(`<aside epub:type="footnote" id="` + safeID(n.ID) + `" class="note">` + "\n")
+		frag := r.pl.fragOf[n]
+		if frag == "" {
+			frag = safeID(n.ID)
+		}
+		r.w.WriteString(`<aside epub:type="footnote" id="` + frag + `" class="note">` + "\n")
 		if len(n.Title) > 0 {
 			r.w.WriteString(`<p class="note-title">`)
 			r.renderInlines(blocksInline(n.Title))
@@ -141,6 +145,12 @@ func (r *renderer) renderBlock(b model.Block) {
 		frag := r.pl.paraFrag[n]
 		if frag == "" {
 			frag = safeID(n.ID)
+		}
+		// Drop an empty, anchorless paragraph (no visible text/image/link): it would
+		// render as <p></p>, an unwanted blank line (DESIGN §3.9). Anchored or
+		// heading paragraphs are kept — they may be link targets.
+		if !n.Heading && frag == "" && inlinesEmpty(n.Inlines) {
+			return
 		}
 		if n.Heading {
 			// User-accepted unmarked heading → render as a heading (in the TOC).
@@ -327,6 +337,27 @@ func (r *renderer) imgSrc(binID string) string {
 		return ""
 	}
 	return relHref(r.file, target, "")
+}
+
+// inlinesEmpty reports whether a paragraph's inlines carry no visible content: no
+// non-whitespace text and no image/link. nbsp (U+00A0) counts as whitespace, so a
+// space-only paragraph is treated as empty (real spacers are <empty-line/>).
+func inlinesEmpty(in []model.Inline) bool {
+	for _, x := range in {
+		switch n := x.(type) {
+		case *model.Text:
+			if strings.TrimSpace(n.Value) != "" {
+				return false
+			}
+		case *model.Styled:
+			if !inlinesEmpty(n.Children) {
+				return false
+			}
+		case *model.Link, *model.InlineImage:
+			return false
+		}
+	}
+	return true
 }
 
 // blocksInline flattens paragraphs in a title-like block slice to inline nodes.
