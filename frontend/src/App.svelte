@@ -178,6 +178,7 @@
       : result.findings
     : [];
   $: shownCapped = shown.slice(0, DISPLAY_CAP);
+  $: selectedRuleCount = result && filterRule ? result.rules.find((r) => r.id === filterRule)?.count ?? 0 : 0;
 </script>
 
 <header>
@@ -361,6 +362,7 @@
         <div class="findings-head">
           Показано {shownCapped.length} из {shown.length}
           {#if result.truncated && !filterRule}(всего {result.total}, список усечён){/if}
+          {#if filterRule && selectedRuleCount > shown.length}(показаны первые {shown.length} из {selectedRuleCount}){/if}
         </div>
         <ul class="flist">
           {#each shownCapped as f}

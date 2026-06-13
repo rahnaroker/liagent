@@ -78,8 +78,11 @@ type LoadResult struct {
 	Truncated bool          `json:"truncated"`
 }
 
-// maxFindingsSent caps the per-load instance payload; counts are always exact.
-const maxFindingsSent = 4000
+// perRuleCap limits how many example findings of each rule are sent to the UI.
+// Counts (the sidebar badges) are always exact; this only bounds the drill-down
+// payload. Capping per rule (not by a global document-order prefix) guarantees
+// every rule with findings is represented, so clicking any rule shows examples.
+const perRuleCap = 200
 
 // --- bound methods ---------------------------------------------------------
 
@@ -223,11 +226,16 @@ func buildResult(path string, book *model.Book, findings []rules.Finding, enable
 		})
 	}
 
-	views := make([]FindingView, 0, min(len(findings), maxFindingsSent))
+	// Send up to perRuleCap examples per rule. Scanning all findings (no early
+	// break) ensures every rule's first occurrences are included regardless of
+	// their position in the document.
+	sent := make(map[string]int)
+	views := make([]FindingView, 0, 4096)
 	for _, f := range findings {
-		if len(views) >= maxFindingsSent {
-			break
+		if sent[f.RuleID] >= perRuleCap {
+			continue
 		}
+		sent[f.RuleID]++
 		views = append(views, FindingView{
 			RuleID:  f.RuleID,
 			Section: f.Section,
