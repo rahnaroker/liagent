@@ -1,0 +1,10 @@
+build/bin
+node_modules
+frontend/dist
+
+# Build artifacts
+out.epub
+*.epub
+
+# Test / sample books (copyrighted, not for distribution)
+*.fb2
