@@ -157,6 +157,25 @@ func TestDashRange(t *testing.T) {
 	}
 }
 
+func TestNbspUnitsAmbiguousLetter(t *testing.T) {
+	// "в" without a trailing dot is the preposition here, not the unit век/вольт:
+	// the pier number must not be glued to it.
+	got, _ := runPara("на Пирсе 66 в Форте")
+	if strings.Contains(got, "66"+nbsp+"в") {
+		t.Errorf("number glued to preposition: %q", got)
+	}
+	// A dotted single-letter abbreviation after a number still gets the nbsp.
+	got2, _ := runPara("это был 2024 г. точно")
+	if !strings.Contains(got2, "2024"+nbsp+"г.") {
+		t.Errorf("dotted abbreviation not glued: %q", got2)
+	}
+	// Multi-letter units are unambiguous and unaffected.
+	got3, _ := runPara("вес 5 кг ровно")
+	if !strings.Contains(got3, "5"+nbsp+"кг") {
+		t.Errorf("multi-letter unit not glued: %q", got3)
+	}
+}
+
 func TestRuleToggleDisablesQuotes(t *testing.T) {
 	// Engine with every rule except quotes: straight quotes stay straight.
 	eng := NewEngineFor(func(id string) bool { return id != "quotes" })

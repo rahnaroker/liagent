@@ -136,7 +136,10 @@ func isWordRune(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) 
 
 // unitWords are abbreviated units/quantities that should stay glued to their
 // preceding number (12 кг, 5 км, 2024 г., 10 руб). Spelled-out words are not
-// listed (no nbsp needed there).
+// listed (no nbsp needed there). Single-letter entries (в, с, г, т, м, л, р, ч,
+// ц) collide with prepositions/short words ("66 в Форт-Лодердейле"), so they are
+// only accepted with a trailing dot (see nbspUnits) — real abbreviations carry
+// one: "2024 г.", "XX в.".
 var unitWords = map[string]bool{
 	"кг": true, "г": true, "т": true, "ц": true, "мг": true,
 	"км": true, "м": true, "см": true, "мм": true,
@@ -144,7 +147,7 @@ var unitWords = map[string]bool{
 	"руб": true, "р": true, "коп": true,
 	"ч": true, "мин": true, "сек": true, "с": true,
 	"тыс": true, "млн": true, "млрд": true,
-	"в": true, // 2024 г. / XX в. (needs a digit before, so low risk)
+	"в": true,
 }
 
 // nbsp-units: glue an abbreviated unit to the number before it with a nbsp. Done
@@ -181,6 +184,12 @@ func nbspUnits(m meta, s string) (string, []Finding) {
 			continue
 		}
 		if !unitWords[strings.ToLower(string(runes[j:k]))] {
+			continue
+		}
+		// A single-letter unit must be followed by a dot ("2024 г.", "XX в.");
+		// otherwise it is almost certainly a preposition/short word, not a unit
+		// ("66 в Форт-Лодердейле"), and must not be glued to the number.
+		if k-j == 1 && (k >= len(runes) || runes[k] != '.') {
 			continue
 		}
 		fs = append(fs, m.find(" ", nbsp, runeContext(runes, i-1, k)))
