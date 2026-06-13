@@ -110,6 +110,12 @@
         genCoverUri = "";
         coverInfo = null;
         meta = null;
+
+        // подгрузить данные активной вкладки под новую книгу
+        if (view === "meta") await showMeta();
+        else if (view === "preview") await refreshPreview();
+        else if (view === "cover") await showCover();
+        // view === "findings" использует result напрямую — доп. загрузка не нужна
       }
     } catch (e) {
       errorMsg = String(e);
@@ -175,22 +181,24 @@
 </script>
 
 <header>
-  <div class="brand">litagent</div>
-  <button on:click={openFile} disabled={loading}>Открыть FB2…</button>
-  <button on:click={exportEpub} disabled={loading || !result}>Собрать EPUB…</button>
-  {#if result}<span class="file">{result.name}</span>{/if}
-  {#if result}
-    <span class="tabs">
-      <button class:tab-active={view === "findings"} on:click={() => (view = "findings")}>Правки</button>
-      <button class:tab-active={view === "preview"} on:click={showPreview}>Превью</button>
-      <button class:tab-active={view === "cover"} on:click={showCover}>Обложка</button>
-      <button class:tab-active={view === "meta"} on:click={showMeta}>Метаданные</button>
-    </span>
-  {/if}
-  <div class="spacer"></div>
-  {#if loading}<span class="status">обработка…</span>{/if}
-  {#if statusMsg}<span class="status ok">{statusMsg}</span>{/if}
-  {#if errorMsg}<span class="status err">{errorMsg}</span>{/if}
+  <div class="toolbar">
+    <div class="brand">litagent</div>
+    <button on:click={openFile} disabled={loading}>Открыть FB2…</button>
+    <button on:click={exportEpub} disabled={loading || !result}>Собрать EPUB…</button>
+    {#if result}
+      <span class="tabs">
+        <button class:tab-active={view === "findings"} on:click={() => (view = "findings")}>Правки</button>
+        <button class:tab-active={view === "preview"} on:click={showPreview}>Превью</button>
+        <button class:tab-active={view === "cover"} on:click={showCover}>Обложка</button>
+        <button class:tab-active={view === "meta"} on:click={showMeta}>Метаданные</button>
+      </span>
+    {/if}
+    <div class="spacer"></div>
+    {#if loading}<span class="status">обработка…</span>{/if}
+    {#if statusMsg}<span class="status ok">{statusMsg}</span>{/if}
+    {#if errorMsg}<span class="status err">{errorMsg}</span>{/if}
+  </div>
+  {#if result}<div class="file" title={result.name}>{result.name}</div>{/if}
 </header>
 
 {#if !result}
@@ -389,11 +397,16 @@
 
   header {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    gap: 6px;
     padding: 10px 14px;
     background: #15202b;
     border-bottom: 1px solid #2c3a48;
+  }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
   }
   .brand {
     font-weight: 800;
@@ -403,6 +416,9 @@
   header .file {
     color: #9fb3c8;
     font-style: italic;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .spacer {
     flex: 1;
