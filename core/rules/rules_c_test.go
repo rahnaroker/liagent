@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"strings"
 	"testing"
 
 	"litagent/core/model"
@@ -85,6 +86,27 @@ func TestDehyphDictGated(t *testing.T) {
 	// A real compound (hyphen, no space) is never matched.
 	if _, fs3 := runPara("что-то там"); findByRule(fs3, "dehyph") != nil {
 		t.Error("compound word wrongly flagged")
+	}
+}
+
+func TestDehyphSuspendedHyphen(t *testing.T) {
+	// A suspended hyphen ("трёх- и четырёхэтажный") must keep its hyphen and not
+	// be suggested for joining — the hyphen marks an omitted shared part. (The
+	// conjunction may still get a non-breaking space after it from nbsp-prep; that
+	// is a separate, correct change, so we assert the hyphen+conjunction prefix.)
+	cases := []struct{ in, keep string }{
+		{"застроен трех- и четырехэтажными домами", "трех- и"},
+		{"одно- или двухкомнатная квартира", "одно- или"},
+		{"радио- и телепередачи", "радио- и"},
+	}
+	for _, c := range cases {
+		got, fs := runPara(c.in)
+		if !strings.Contains(got, c.keep) {
+			t.Errorf("in %q: suspended hyphen altered: %q", c.in, got)
+		}
+		if f := findByRule(fs, "dehyph"); f != nil {
+			t.Errorf("in %q: suspended hyphen wrongly flagged: %+v", c.in, f)
+		}
 	}
 }
 

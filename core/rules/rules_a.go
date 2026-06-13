@@ -34,7 +34,15 @@ var ruleEllSpaced = reRule(
 
 var ruleSpBeforePunct = reRule(
 	"sp-before-punct", "Пробел перед знаком препинания", "spacing", ConfA,
-	`[ \x{00A0}]+([,.;:!?…)»])`, group(1),
+	`[ \x{00A0}]+([,.;:!?…)»\]“])`, group(1),
+)
+
+// sp-bracket: a space right after an opening bracket/quote ( «( текст» → «(текст»).
+// The closing side ( ) » ] “ ) is covered by sp-before-punct. Opening quotes in
+// this codebase are « and „ ; “ is a nested *closing* quote (see quotes.go).
+var ruleSpBracket = reRule(
+	"sp-bracket", "Пробелы внутри скобок и кавычек", "spacing", ConfA,
+	`([(\[«„])[ \x{00A0}]+`, group(1),
 )
 
 var ruleSpAfterPunct = reRule(

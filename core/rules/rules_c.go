@@ -15,6 +15,14 @@ import (
 // NO following space (что-то, из-за) is a real compound and is never matched.
 var dehyphRe = regexp.MustCompile(`(\p{L}+)-[ \t\r\n]+(\p{Ll}[\p{L}]*)`)
 
+// suspendedHyphenRight are coordinating conjunctions that, following a "word- ",
+// mark a *suspended* (hanging) hyphen — "трёх- и четырёхэтажный", "радио- и
+// телепередачи" — where the hyphen stands for an omitted shared part. This is
+// correct typography, not a line-break artefact, so such pairs are left intact.
+var suspendedHyphenRight = map[string]bool{
+	"и": true, "или": true, "либо": true, "ни": true, "да": true, "а": true, "но": true,
+}
+
 var ruleDehyph = fnRule(
 	"dehyph", "Склейка переноса слова", "ocr", ConfB, dehyphFn,
 )
@@ -34,6 +42,12 @@ func dehyphFn(m meta, s string) (string, []Finding) {
 		match := s[ms:me]
 		joined := left + right
 		b.WriteString(s[last:ms])
+		if suspendedHyphenRight[strings.ToLower(right)] {
+			// Suspended hyphen ("трёх- и четырёхэтажный"): keep as-is, no suggestion.
+			b.WriteString(match)
+			last = me
+			continue
+		}
 		if dictHas(joined) {
 			// Known word → safe to auto-join (B).
 			b.WriteString(joined)

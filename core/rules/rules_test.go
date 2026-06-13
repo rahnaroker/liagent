@@ -52,6 +52,9 @@ func TestLevelARules(t *testing.T) {
 		{"registered", "Бренд(r)", "Бренд®"},
 		{"trademark", "Марка(tm)", "Марка™"},
 		{"dup comma", "текст,, ещё", "текст, ещё"},
+		{"space inside parens", "( текст )", "(текст)"},
+		{"space inside brackets", "[ 1 ]", "[1]"},
+		{"space after opening quote", "« текст", "«текст"},
 		{"nbsp preserved", "а б", "а б"},
 		{"combo", "Текст  ,...и  вот - так", "Текст,…и вот — так"},
 	}

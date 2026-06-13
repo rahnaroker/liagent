@@ -106,6 +106,57 @@ func TestDashEndash(t *testing.T) {
 	}
 }
 
+func TestNbspAbbr(t *testing.T) {
+	// "т. д." core gets a nbsp; the leading "и" gets one from nbsp-prep.
+	got, _ := runPara("и т. д.")
+	want := "и" + nbsp + "т." + nbsp + "д."
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+	got2, _ := runPara("то есть т. е. вот")
+	if !strings.Contains(got2, "т."+nbsp+"е.") {
+		t.Errorf("abbr not glued: %q", got2)
+	}
+	// A sentence boundary must NOT be glued.
+	got3, _ := runPara("он. Та дверь")
+	if strings.Contains(got3, nbsp) {
+		t.Errorf("sentence boundary glued: %q", got3)
+	}
+}
+
+func TestDialogDashGlue(t *testing.T) {
+	for _, in := range []string{"—Привет", "-Привет", "–Привет"} {
+		got, _ := runPara(in)
+		if got != "— Привет" {
+			t.Errorf("in %q: got %q, want %q", in, got, "— Привет")
+		}
+	}
+	// A dash followed by punctuation/digit is not a glued reply.
+	for _, in := range []string{"—!", "—2"} {
+		got, _ := runPara(in)
+		if got != in {
+			t.Errorf("in %q changed to %q", in, got)
+		}
+	}
+}
+
+func TestDashRange(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"1941-1945 годы", "1941–1945 годы"},
+		{"страницы 5-7", "страницы 5–7"},
+		{"Т-34", "Т-34"},          // letter-digit compound
+		{"5-летний", "5-летний"},  // digit-letter compound
+		{"тел 12-34-56", "тел 12-34-56"}, // phone: two hyphens
+		{"дата 2020-01-02", "дата 2020-01-02"}, // ISO date: two hyphens
+	}
+	for _, c := range cases {
+		got, _ := runPara(c.in)
+		if got != c.want {
+			t.Errorf("in %q: got %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestRuleToggleDisablesQuotes(t *testing.T) {
 	// Engine with every rule except quotes: straight quotes stay straight.
 	eng := NewEngineFor(func(id string) bool { return id != "quotes" })

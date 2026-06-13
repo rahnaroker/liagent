@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -26,6 +27,33 @@ var ruleNbspInit = reRule(
 	"nbsp-init", "Неразрывный пробел в инициалах", "typography", ConfB,
 	`(\p{Lu}\.)[ \x{00A0}]+(\p{Lu}\.)`, func(g []string) string { return g[1] + nbsp + g[2] },
 )
+
+// nbsp-abbr: non-breaking space inside fixed two-letter abbreviations so they do
+// not wrap across a line (т. д., т. е., н. э. …). A whitelist of exact token pairs
+// is used — a generic "letter. Letter" pattern would wrongly glue sentence
+// boundaries ("он. Та"). The leading "и"/"до" of "и т. д." / "до н. э." already
+// gets a nbsp from nbsp-prep (both are in shortWords), so only the core is joined.
+var abbrRes = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)(т)\.[ \x{00A0}]+(д|п|е|к|н|о)\.`),
+	regexp.MustCompile(`(?i)(н)\.[ \x{00A0}]+(э)\.`),
+	regexp.MustCompile(`(?i)(и)\.[ \x{00A0}]+(о)\.`),
+}
+
+func abbrRepl(g []string) string { return g[1] + "." + nbsp + g[2] + "." }
+
+var ruleNbspAbbr = fnRule(
+	"nbsp-abbr", "Неразрывный пробел в сокращениях", "typography", ConfB, nbspAbbr,
+)
+
+func nbspAbbr(m meta, s string) (string, []Finding) {
+	var fs []Finding
+	for _, re := range abbrRes {
+		var rf []Finding
+		s, rf = applyRegex(m, re, abbrRepl, s)
+		fs = append(fs, rf...)
+	}
+	return s, fs
+}
 
 // nbsp-num: non-breaking space around numbers and signs (5 %, № 7).
 var ruleNbspNum = reRule(
@@ -207,3 +235,101 @@ func isDialogueDash(r rune) bool {
 }
 
 func isSpaceRune(r rune) bool { return r == ' ' || r == nbspRune || r == '\t' }
+
+// dialog-dash-glue: a dialogue dash glued to the first word of a paragraph
+// (—Текст / -Текст) → em dash + space. Complements dialog-dash, which only fires
+// when a space already follows; here the next rune must be a letter (so "—!" or
+// "—2" are left untouched). The two rules are mutually exclusive on that rune.
+var ruleDialogDashGlue = containerRule{
+	id: "dialog-dash-glue", name: "Пробел после тире реплики", category: "typography", level: ConfB,
+	apply: func(inlines []model.Inline) []Finding {
+		if len(inlines) == 0 {
+			return nil
+		}
+		t, ok := inlines[0].(*model.Text)
+		if !ok {
+			return nil
+		}
+		runes := []rune(t.Value)
+		k := 0
+		for k < len(runes) && isSpaceRune(runes[k]) {
+			k++
+		}
+		if k+1 >= len(runes) || !isDialogueDash(runes[k]) || !unicode.IsLetter(runes[k+1]) {
+			return nil
+		}
+		m := meta{id: "dialog-dash-glue", category: "typography", level: ConfB}
+		f := m.find(string(runes[k]), "— ", runeContext(runes, k, k+1))
+		out := append([]rune{}, runes[:k]...)
+		out = append(out, '—', ' ')
+		out = append(out, runes[k+1:]...)
+		t.Value = string(out)
+		return []Finding{f}
+	},
+}
+
+// enDash (U+2013) joins numeric ranges; the em dash — is reserved for sentences.
+const enDash = '–'
+
+// dash-range: a numeric range written with a hyphen → en dash, no spaces
+// (1941-1945 → 1941–1945). Guards: the token must be digits joined by exactly one
+// hyphen, each side 1–4 digits. Phone numbers / ISO dates (two+ hyphens) and
+// letter-digit compounds (Т-34, 5-летний) are excluded because the token is
+// digit-only and a side touching a letter is never a pure number token.
+var ruleDashRange = fnRule(
+	"dash-range", "Числовой диапазон через тире", "typography", ConfB, dashRange,
+)
+
+func dashRange(m meta, s string) (string, []Finding) {
+	if !strings.ContainsRune(s, '-') {
+		return s, nil
+	}
+	runes := []rune(s)
+	var fs []Finding
+	for i := 0; i < len(runes); {
+		if !unicode.IsDigit(runes[i]) {
+			i++
+			continue
+		}
+		// Maximal [0-9-] token starting at this digit.
+		j := i
+		for j < len(runes) && (unicode.IsDigit(runes[j]) || runes[j] == '-') {
+			j++
+		}
+		// Token must end on a digit (a letter right after rules it out as a range).
+		end := j
+		for end > i && runes[end-1] == '-' {
+			end--
+		}
+		if j >= len(runes) || !unicode.IsLetter(runes[j]) {
+			convertRange(m, runes, i, end, &fs)
+		}
+		i = j
+	}
+	if len(fs) == 0 {
+		return s, nil
+	}
+	return string(runes), fs
+}
+
+// convertRange rewrites runes[a:b] in place if it is a single-hyphen range with
+// 1–4 digits on each side, recording a finding.
+func convertRange(m meta, runes []rune, a, b int, fs *[]Finding) {
+	hyphen, count := -1, 0
+	for k := a; k < b; k++ {
+		if runes[k] == '-' {
+			hyphen = k
+			count++
+		}
+	}
+	if count != 1 {
+		return
+	}
+	left, right := hyphen-a, b-hyphen-1
+	if left < 1 || left > 4 || right < 1 || right > 4 {
+		return
+	}
+	before := string(runes[a:b])
+	runes[hyphen] = enDash
+	*fs = append(*fs, m.find(before, string(runes[a:b]), runeContext(runes, a, b)))
+}
