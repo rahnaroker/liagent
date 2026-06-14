@@ -8,3 +8,6 @@ out.epub
 
 # Test / sample books (copyrighted, not for distribution)
 *.fb2
+
+# Local planning notes (not for the repo)
+plans/
