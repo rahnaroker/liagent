@@ -6,6 +6,11 @@
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "auto",
+  "postBuildHooks": {
+    "windows/*": "powershell -NoProfile -Command \"Copy-Item -Path ../../wallpaper -Destination . -Recurse -Force\"",
+    "darwin/*": "cp -R ../../wallpaper .",
+    "linux/*": "cp -R ../../wallpaper ."
+  },
   "author": {
     "name": "",
     "email": ""
